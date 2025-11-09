@@ -75,6 +75,26 @@ const getCategoryColor = (category: string) => {
 
 type TimeFilter = 'today' | '7days' | '30days' | 'all';
 
+// Helper function to calculate dashboard stats
+function getStats(data: FileMetadata[]) {
+    const totalFiles = data.length;
+    const totalSize = data.reduce((sum, f) => sum + (f.size || 0), 0);
+    const recentUploads = data.filter(file => {
+        const uploadDate = new Date(file.uploaded_at);
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return uploadDate > weekAgo;
+    }).length;
+    const analyzedFiles = totalFiles; // All files are analyzed
+
+    return {
+        totalFiles,
+        totalSize,
+        recentUploads,
+        analyzedFiles,
+    };
+}
+
 export default function Dashboard() {
     const router = useRouter();
     const [stats, setStats] = useState<DashboardStats>({
@@ -137,13 +157,28 @@ export default function Dashboard() {
         try {
             const { data, error } = await supabase
                 .from('files_metadata')
-                .select('*')
+                .select('id, name, size, mime_type, category, confidence, folder_path, public_url, uploaded_at')
                 .order('uploaded_at', { ascending: false });
 
-            if (error) throw error;
-            setAllFiles(data || []);
+            if (error) {
+                console.error('Supabase error:', error);
+                throw error;
+            }
+
+            const filesData = data || [];
+            setAllFiles(filesData);
+
+            // Calculate initial stats
+            const initialStats = getStats(filesData);
+            setStats(initialStats);
+
+            // Immediately apply filters and update stats after data is loaded
+            if (filesData.length > 0) {
+                applyFilters();
+            }
         } catch (error) {
             console.error('Error fetching files:', error);
+            setAllFiles([]); // Ensure we set empty array on error
         } finally {
             setLoading(false);
         }
@@ -292,23 +327,9 @@ export default function Dashboard() {
     };
 
     const updateStatsAndCharts = (filesData: FileMetadata[]) => {
-        // Calculate stats
-        const totalFiles = filesData.length;
-        const totalSize = filesData.reduce((sum, file) => sum + file.size, 0);
-        const recentUploads = filesData.filter(file => {
-            const uploadDate = new Date(file.uploaded_at);
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            return uploadDate > weekAgo;
-        }).length;
-        const analyzedFiles = totalFiles; // All files are analyzed
-
-        setStats({
-            totalFiles,
-            totalSize,
-            recentUploads,
-            analyzedFiles,
-        });
+        // Use the helper function to calculate stats
+        const calculatedStats = getStats(filesData);
+        setStats(calculatedStats);
 
         // File type distribution
         const typeCounts: { [key: string]: number } = {};
@@ -385,6 +406,32 @@ export default function Dashboard() {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    // Show message when no data is available
+    if (allFiles.length === 0) {
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+                    <p className="text-muted-foreground">
+                        Overview of your file uploads and analysis activity
+                    </p>
+                </div>
+                <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-12">
+                        <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-medium mb-2">No files uploaded yet</h3>
+                        <p className="text-muted-foreground text-center mb-4">
+                            Start by uploading some files to see your dashboard analytics and insights.
+                        </p>
+                        <Button onClick={() => router.push('/upload')}>
+                            Upload Files
+                        </Button>
+                    </CardContent>
+                </Card>
             </div>
         );
     }
