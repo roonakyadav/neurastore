@@ -31,23 +31,15 @@ const getFileTypeCategory = (type: string) => {
 };
 
 export default function DashboardCharts({ files }: { files: any[] }) {
-    if (!files || files.length === 0) {
-        return <p className="text-gray-400">No data available.</p>;
-    }
+    if (!files || files.length === 0) return <p>No data to visualize.</p>;
 
-    const safeFiles = files.filter(f => !!f.category && f.category !== "Unclassified");
-    if (safeFiles.length === 0) {
-        return <p className="text-gray-400">No classified data to display.</p>;
-    }
-
-    // Protect all chart mappings with safe data handling
-    const dataByCategory = safeFiles?.reduce((acc: Record<string, number>, file) => {
-        const cat = file.category;
+    const categories = files.reduce((acc: any, f: any) => {
+        const cat = f.category || "Other";
         acc[cat] = (acc[cat] || 0) + 1;
         return acc;
-    }, {} as Record<string, number>) || {};
+    }, {});
 
-    const fileTypeData = Object.entries(dataByCategory).map(([name, value]) => ({ name, value }));
+    const fileTypeData = Object.entries(categories).map(([name, value]) => ({ name, value }));
 
     // Validate before render
     if (!fileTypeData || fileTypeData.length === 0) {
@@ -79,7 +71,7 @@ export default function DashboardCharts({ files }: { files: any[] }) {
 
     // Top AI tags data
     const tagCounts: { [key: string]: number } = {};
-    safeFiles.forEach(file => {
+    files.forEach((file: any) => {
         if (file.ai_tags && Array.isArray(file.ai_tags)) {
             file.ai_tags.forEach((tag: string) => {
                 tagCounts[tag] = (tagCounts[tag] || 0) + 1;
