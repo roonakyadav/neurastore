@@ -137,7 +137,24 @@ export default function Dashboard() {
                     setError(error.message);
                 } else {
                     console.log('Fetched dashboard data:', data);
-                    setAllFiles(data || []);
+
+                    // Strict data sanitization to prevent crashes from malformed records
+                    const safeFiles = (data || []).filter(
+                        f => f && typeof f === 'object' && f.name && f.uploaded_at
+                    ).map(f => ({
+                        id: f.id || crypto.randomUUID(),
+                        name: f.name || 'Unnamed File',
+                        size: f.size || 0,
+                        mime_type: f.mime_type || 'unknown',
+                        category: f.category || 'Unclassified',
+                        confidence: typeof f.confidence === 'number' ? f.confidence : 0,
+                        folder_path: f.folder_path || '',
+                        public_url: f.public_url || '',
+                        uploaded_at: f.uploaded_at || new Date().toISOString(),
+                    }));
+
+                    console.log('Sanitized dashboard files:', safeFiles);
+                    setAllFiles(safeFiles);
                 }
             } catch (err: any) {
                 console.error('Dashboard fetch error:', err);

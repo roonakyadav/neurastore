@@ -43,21 +43,27 @@ export default function DashboardCharts({ files }: DashboardChartsProps) {
         );
     }
 
-    // Prevent crashes
-    const categories = files.map(f => f.category || 'Uncategorized');
-    const chartData = Array.isArray(categories) ? categories : [];
+    // Protect all chart mappings with safe data handling
+    const dataByCategory = files?.reduce((acc: Record<string, number>, file) => {
+        const cat = file.category || 'Unclassified';
+        acc[cat] = (acc[cat] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>) || {};
 
-    // AI Category distribution data (using the actual AI classification categories)
-    const categoryCounts: { [key: string]: number } = {};
-    files.forEach(file => {
-        const category = file.category || 'Uncategorized';
-        categoryCounts[category] = (categoryCounts[category] || 0) + 1;
-    });
+    const fileTypeData = Object.entries(dataByCategory).map(([name, value]) => ({ name, value }));
 
-    const fileTypeData = Object.entries(categoryCounts).map(([name, value]) => ({
-        name,
-        value,
-    }));
+    // Validate before render
+    if (!fileTypeData || fileTypeData.length === 0) {
+        return (
+            <div className="grid gap-4 md:grid-cols-2">
+                <Card className="md:col-span-2">
+                    <CardContent className="flex items-center justify-center h-[300px] text-muted-foreground">
+                        <p>No data available for charts</p>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
 
     // Upload trend data (last 7 days)
     const uploadTrendData = [];
