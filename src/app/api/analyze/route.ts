@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabaseClient";
 
 export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file") as File;
+    const fileId = formData.get("fileId") as string;
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
     const type = file.type.split("/")[0];
@@ -23,6 +25,14 @@ export async function POST(req: Request) {
 
     try {
         const result = await response.json();
+
+        // Save tags as array in ai_tags JSONB field
+        if (fileId && result.tags) {
+            await supabase.from("files_metadata")
+                .update({ ai_tags: result.tags })
+                .eq("id", fileId);
+        }
+
         return NextResponse.json(result);
     } catch {
         return NextResponse.json({ tags: ["analysis_failed"] });

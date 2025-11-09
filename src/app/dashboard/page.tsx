@@ -25,6 +25,7 @@ interface FileMetadata {
     folder_path: string;
     public_url: string;
     uploaded_at: string;
+    ai_tags?: string[];
 }
 
 interface DashboardStats {
@@ -137,28 +138,30 @@ export default function Dashboard() {
             setTimeFilter(savedFilter);
         }
 
-        let active = true;
-        setIsLoading(true);
-        (async () => {
+        async function fetchData() {
             try {
                 const { data, error } = await supabase
-                    .from('files_metadata')
-                    .select('*')
-                    .order('uploaded_at', { ascending: false });
+                    .from("files_metadata")
+                    .select("*")
+                    .order("uploaded_at", { ascending: false });
 
-                if (active) {
-                    if (error) throw error;
-                    setAllFiles(Array.isArray(data) ? data : []);
-                }
+                if (error) throw error;
+                if (!Array.isArray(data)) throw new Error("Invalid data format");
+
+                setAllFiles(data);
+                console.log("Fetched dashboard data:", data);
+                console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
             } catch (err) {
-                console.error('Dashboard fetch error:', err);
-                if (active) setAllFiles([]);
-            } finally {
-                if (active) setIsLoading(false);
+                console.error("Dashboard fetch error:", err);
+                setAllFiles([]);
             }
-        })();
+        }
 
-        return () => { active = false; };
+        let isMounted = true;
+        fetchData().then(() => {
+            if (!isMounted) return;
+        });
+        return () => { isMounted = false };
     }, []);
 
     useEffect(() => {
@@ -417,7 +420,7 @@ export default function Dashboard() {
             {isLoading ? (
                 <div className="flex justify-center p-8">Loading dashboard data...</div>
             ) : !allFiles || allFiles.length === 0 ? (
-                <div className="text-center p-8">No files found.</div>
+                <p className="text-gray-400">No files found in Supabase.</p>
             ) : (
                 <>
                     {/* Summary Cards */}

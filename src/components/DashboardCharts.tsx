@@ -13,6 +13,7 @@ interface FileMetadata {
     folder_path: string;
     public_url: string;
     uploaded_at: string;
+    ai_tags?: string[];
 }
 
 interface DashboardChartsProps {
@@ -44,9 +45,12 @@ export default function DashboardCharts({ files }: DashboardChartsProps) {
         );
     }
 
+    // Before mapping data:
+    const safeFiles = files.filter(f => !!f.category);
+
     // Protect all chart mappings with safe data handling
-    const dataByCategory = files?.reduce((acc: Record<string, number>, file) => {
-        const cat = file.category || 'Unclassified';
+    const dataByCategory = safeFiles?.reduce((acc: Record<string, number>, file) => {
+        const cat = file.category;
         acc[cat] = (acc[cat] || 0) + 1;
         return acc;
     }, {} as Record<string, number>) || {};
@@ -83,9 +87,12 @@ export default function DashboardCharts({ files }: DashboardChartsProps) {
 
     // Top AI tags data
     const tagCounts: { [key: string]: number } = {};
-    files.forEach(file => {
-        const category = file.category || 'Uncategorized';
-        tagCounts[category] = (tagCounts[category] || 0) + 1;
+    safeFiles.forEach(file => {
+        if (file.ai_tags && Array.isArray(file.ai_tags)) {
+            file.ai_tags.forEach(tag => {
+                tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+            });
+        }
     });
 
     const topTags = Object.entries(tagCounts)

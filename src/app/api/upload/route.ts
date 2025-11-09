@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { detectMimeType, getFolderPath, generateFilePath, uploadToSupabase, saveFileMetadata } from "@/lib/utils/fileHandler";
 import { processJSONFile, saveJSONSchema } from "@/lib/utils/schemaGenerator";
 import { supabase } from "@/lib/supabaseClient";
-import { detectFileCategory, classifyJSON } from "@/lib/fileClassifier";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -115,19 +114,32 @@ export async function POST(req: Request) {
 
         const { publicUrl } = uploadResult;
 
-        // Step 6: Classify the file
-        let category = detectFileCategory(file.name, mimeType);
+        // Step 6: Classify the file with robust category detection
+        function detectFileCategory(mime: string, name: string): string {
+            if (mime.startsWith("image/")) return "Image";
+            if (mime.startsWith("video/")) return "Video";
+            if (mime.startsWith("audio/")) return "Audio";
+            if (mime === "application/pdf") return "PDF";
+            if (mime === "text/plain") return "Text";
+            if (mime.includes("json") || name.endsWith(".json")) return "JSON";
+            if (mime.includes("zip")) return "Archive";
+            return "Other";
+        }
+
+        let category = detectFileCategory(mimeType, file.name);
         let confidence = 1;
 
-        if (file.name.toLowerCase().endsWith('.json')) {
+        // If JSON file: parse safely
+        if (category === "JSON") {
             try {
                 const content = buffer.toString('utf-8');
-                category = classifyJSON(content);
-                confidence = 1;
-            } catch (error) {
-                console.error("JSON classification failed:", error);
-                category = "Corrupted JSON";
-                confidence = 1;
+                const parsed = JSON.parse(content);
+                const jsonType = parsed.sql ? "SQL JSON" :
+                    parsed.collections || parsed.documents ? "NoSQL JSON" :
+                        "Generic JSON";
+                category = jsonType;
+            } catch {
+                category = "Malformed JSON";
             }
         }
 
