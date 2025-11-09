@@ -143,6 +143,40 @@ export async function POST(req: Request) {
             );
         }
 
+        // Extract filename for logging
+        const filename = extractFilenameFromUrl(fileUrl);
+
+        // Explicit MIME type mapping for common file types
+        let category: string;
+        let confidence: number = 0.95;
+
+        if (mimeType.startsWith('image/')) {
+            category = 'Image';
+        } else if (mimeType.startsWith('video/')) {
+            category = 'Video';
+        } else if (mimeType.startsWith('audio/')) {
+            category = 'Audio';
+        } else if (mimeType === 'application/pdf') {
+            category = 'Document';
+        } else if (mimeType === 'application/json') {
+            category = 'JSON';
+        } else if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') || mimeType.includes('gzip')) {
+            category = 'Archive';
+        } else if (mimeType.startsWith('text/') || mimeType.includes('javascript') || mimeType.includes('typescript') || mimeType.includes('html') || mimeType.includes('css') || mimeType.includes('python') || mimeType.includes('java')) {
+            category = 'Text / Code';
+        } else {
+            // Use the categoryMap for other types
+            const mapping = categoryMap[mimeType];
+            if (mapping) {
+                category = mapping.category;
+                confidence = mapping.confidence;
+            } else {
+                category = 'Other';
+                confidence = 0.8;
+            }
+        }
+
+        // For images, videos, and PDFs, we still want to use specialized processing
         // Check if file is an image - use Hugging Face for images
         if (mimeType.startsWith("image/")) {
             const key = process.env.HUGGINGFACE_API_KEY;
@@ -189,6 +223,7 @@ export async function POST(req: Request) {
                 );
 
             const { label, score } = result[0];
+            console.log('Classified:', filename, '→', "Image", score || 0);
             return NextResponse.json({
                 category: "Image",
                 confidence: score || 0,
@@ -279,6 +314,7 @@ export async function POST(req: Request) {
                 }
 
                 // Fallback to basic PDF classification
+                console.log('Classified:', filename, '→', "Document", 0.9);
                 return NextResponse.json({
                     category: "Document",
                     confidence: 0.9,
@@ -302,6 +338,7 @@ export async function POST(req: Request) {
 
                 // For video classification, we'll use basic MIME type detection
                 // since ffmpeg requires file system access which we don't have with URLs
+                console.log('Classified:', filename, '→', "Video", 0.95);
                 return NextResponse.json({
                     category: "Video",
                     confidence: 0.95,
@@ -406,10 +443,11 @@ export async function POST(req: Request) {
         }
 
         // Extract filename and get keyword-based tags
-        const filename = extractFilenameFromUrl(fileUrl);
         const keywordTags = getKeywordTags(filename);
         const allTags = [...documentTags, ...keywordTags];
 
+        // Add console log for classification result
+        console.log('Classified:', filename, '→', finalCategory, finalConfidence);
 
         return NextResponse.json({
             category: finalCategory,
