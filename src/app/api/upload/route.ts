@@ -119,86 +119,32 @@ export async function POST(req: Request) {
         let confidence = 0;
 
         if (mimeType === "application/json") {
-            // Special handling for JSON files - use new analysis API
+            // Special handling for JSON files - use classification API
             try {
-                const jsonContent = buffer.toString('utf-8');
-
-                // First save basic metadata to get file_id
-                const basicMetadata = {
-                    name: file.name,
-                    mime_type: mimeType,
-                    size: file.size,
-                    folder_path: folderPath,
-                    public_url: publicUrl,
-                    category: "JSON (Analyzing...)",
-                    confidence: 0.5,
-                };
-
-                const tempMetadata = await saveFileMetadata(basicMetadata);
-                if (!tempMetadata) {
-                    throw new Error("Failed to save temporary metadata");
-                }
-
-                // Get the file_id from the inserted record
-                const { data: fileRecord } = await supabase
-                    .from('files_metadata')
-                    .select('id')
-                    .eq('name', file.name)
-                    .eq('public_url', publicUrl)
-                    .order('uploaded_at', { ascending: false })
-                    .limit(1)
-                    .single();
-
-                if (!fileRecord) {
-                    throw new Error("Failed to retrieve file record");
-                }
-
-                // Call analyze-json API
                 const origin = req.headers.get('origin') || 'http://localhost:3000';
-                const analysisResponse = await fetch(`${origin}/api/analyze-json`, {
+                const classifyResponse = await fetch(`${origin}/api/classify`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        file_id: fileRecord.id,
-                        content: jsonContent
+                        fileUrl: publicUrl,
+                        mimeType: mimeType
                     }),
                 });
 
-                if (analysisResponse.ok) {
-                    const analysisData = await analysisResponse.json();
-                    category = `JSON (${analysisData.storage_type})`;
-                    confidence = 0.95;
-
-                    // If it's SQL type, automatically create the table and insert data
-                    if (analysisData.storage_type === 'SQL') {
-                        try {
-                            const createTableResponse = await fetch(`${origin}/api/create-sql-table`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    file_id: fileRecord.id
-                                }),
-                            });
-
-                            if (createTableResponse.ok) {
-                                const createTableData = await createTableResponse.json();
-                            } else {
-                            }
-                        } catch (createTableError) {
-                        }
-                    }
+                if (classifyResponse.ok) {
+                    const classifyData = await classifyResponse.json();
+                    category = classifyData.category;
+                    confidence = classifyData.confidence;
                 } else {
-                    category = "JSON (Analysis Failed)";
-                    confidence = 0.3;
+                    category = "Corrupted JSON";
+                    confidence = 1.0;
                 }
             } catch (error) {
-                console.error("JSON processing failed:", error);
-                category = "JSON (Parse Error)";
-                confidence = 0.5;
+                console.error("JSON classification failed:", error);
+                category = "Corrupted JSON";
+                confidence = 1.0;
             }
         } else {
             // Use classification API for other file types

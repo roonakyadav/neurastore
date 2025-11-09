@@ -319,54 +319,47 @@ export async function POST(req: Request) {
             }
         }
 
-        // Handle JSON files - detect structure and analyze schema
+        // Handle JSON files - detect structure locally without API calls
         if (mimeType === "application/json") {
             try {
-
                 const fileResponse = await fetch(fileUrl);
                 if (!fileResponse.ok) {
                     throw new Error("Failed to fetch JSON file");
                 }
 
                 const jsonText = await fileResponse.text();
-                const jsonData = JSON.parse(jsonText);
 
-                // Determine if it's an object or array
-                const isArray = Array.isArray(jsonData);
-                const category = isArray ? "JSON Array" : "JSON Object";
-
-                // Use schema inference to analyze structure
+                let parsed;
                 try {
-                    // Import the schema generator dynamically to avoid circular imports
-                    const { processJSONFile } = await import('@/lib/utils/schemaGenerator');
-                    const schemaAnalysis = await processJSONFile(jsonText, "temp");
-
-                    if (schemaAnalysis) {
-                        return NextResponse.json({
-                            category: `JSON (${schemaAnalysis.storageType})`,
-                            confidence: 0.95,
-                            tags: ["json", isArray ? "array" : "object", schemaAnalysis.storageType.toLowerCase()],
-                            schema: schemaAnalysis,
-                            message: "JSON structure and schema analyzed"
-                        });
-                    }
-                } catch (schemaError) {
+                    parsed = JSON.parse(jsonText);
+                } catch {
+                    parsed = null;
                 }
 
-                // Fallback classification
+                let category;
+                let confidence = 1.0; // 100%
+
+                if (parsed === null) {
+                    category = 'Corrupted JSON';
+                } else if (Array.isArray(parsed)) {
+                    category = 'JSON Array';
+                } else {
+                    category = 'JSON Object';
+                }
+
                 return NextResponse.json({
-                    category: category,
-                    confidence: 0.9,
-                    tags: ["json", isArray ? "array" : "object"],
+                    category,
+                    confidence,
+                    tags: ["json"],
                     message: "JSON classified by structure"
                 });
             } catch (error) {
                 console.error("JSON processing failed:", error);
                 return NextResponse.json({
-                    category: "JSON",
-                    confidence: 0.6,
+                    category: "Corrupted JSON",
+                    confidence: 1.0,
                     tags: ["json"],
-                    message: "JSON classification fallback"
+                    message: "JSON classification failed"
                 });
             }
         }
