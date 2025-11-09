@@ -165,15 +165,31 @@ export default function Dashboard() {
                 throw error;
             }
 
-            const filesData = data || [];
-            setAllFiles(filesData);
+            // Filter out malformed records
+            const validData = (data || []).filter(file =>
+                file &&
+                file.name &&
+                file.mime_type &&
+                file.uploaded_at &&
+                file.size !== null
+            );
+
+            // Add fallback values for any remaining null/undefined fields
+            const sanitizedData = validData.map(file => ({
+                ...file,
+                category: file.category || 'Unclassified',
+                size: file.size || 0,
+                confidence: file.confidence || 0,
+            }));
+
+            setAllFiles(sanitizedData);
 
             // Calculate initial stats
-            const initialStats = getStats(filesData);
+            const initialStats = getStats(sanitizedData);
             setStats(initialStats);
 
             // Immediately apply filters and update stats after data is loaded
-            if (filesData.length > 0) {
+            if (sanitizedData.length > 0) {
                 applyFilters();
             }
         } catch (error) {
@@ -429,6 +445,32 @@ export default function Dashboard() {
                         </p>
                         <Button onClick={() => router.push('/upload')}>
                             Upload Files
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
+    // Error boundary check
+    if (!Array.isArray(allFiles)) {
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+                    <p className="text-muted-foreground">
+                        Overview of your file uploads and analysis activity
+                    </p>
+                </div>
+                <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-12">
+                        <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-medium mb-2">Invalid data format</h3>
+                        <p className="text-muted-foreground text-center mb-4">
+                            Unable to load dashboard data. Please refresh the page.
+                        </p>
+                        <Button onClick={() => window.location.reload()}>
+                            Refresh Page
                         </Button>
                     </CardContent>
                 </Card>
