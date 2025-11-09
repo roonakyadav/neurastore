@@ -108,6 +108,7 @@ export default function Dashboard() {
     const [fileTypeData, setFileTypeData] = useState<any[]>([]);
     const [uploadTrendData, setUploadTrendData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -121,7 +122,33 @@ export default function Dashboard() {
     const [isSchemaViewOpen, setIsSchemaViewOpen] = useState(false);
 
     useEffect(() => {
-        fetchAllFiles();
+        const fetchData = async () => {
+            setLoading(true);
+            setError(null);
+            console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+            try {
+                const { data, error } = await supabase
+                    .from('files_metadata')
+                    .select('*')
+                    .order('uploaded_at', { ascending: false });
+
+                if (error) {
+                    console.error('Dashboard fetch error:', error);
+                    setError(error.message);
+                } else {
+                    console.log('Fetched dashboard data:', data);
+                    setAllFiles(data || []);
+                }
+            } catch (err: any) {
+                console.error('Dashboard fetch error:', err);
+                setError(err.message || 'Failed to fetch dashboard data');
+                setAllFiles([]);
+            }
+            setLoading(false);
+        };
+
+        fetchData();
+
         // Load saved filter from localStorage
         const savedFilter = localStorage.getItem('dashboard-time-filter') as TimeFilter;
         if (savedFilter) {
@@ -153,52 +180,7 @@ export default function Dashboard() {
         };
     }, [searchQuery]);
 
-    const fetchAllFiles = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('files_metadata')
-                .select('id, name, size, mime_type, category, confidence, folder_path, public_url, uploaded_at')
-                .order('uploaded_at', { ascending: false });
 
-            if (error) {
-                console.error('Supabase error:', error);
-                throw error;
-            }
-
-            // Filter out malformed records
-            const validData = (data || []).filter(file =>
-                file &&
-                file.name &&
-                file.mime_type &&
-                file.uploaded_at &&
-                file.size !== null
-            );
-
-            // Add fallback values for any remaining null/undefined fields
-            const sanitizedData = validData.map(file => ({
-                ...file,
-                category: file.category || 'Unclassified',
-                size: file.size || 0,
-                confidence: file.confidence || 0,
-            }));
-
-            setAllFiles(sanitizedData);
-
-            // Calculate initial stats
-            const initialStats = getStats(sanitizedData);
-            setStats(initialStats);
-
-            // Immediately apply filters and update stats after data is loaded
-            if (sanitizedData.length > 0) {
-                applyFilters();
-            }
-        } catch (error) {
-            console.error('Error fetching files:', error);
-            setAllFiles([]); // Ensure we set empty array on error
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const getDateRange = (filter: TimeFilter) => {
         const now = new Date();
@@ -426,8 +408,7 @@ export default function Dashboard() {
         );
     }
 
-    // Show message when no data is available
-    if (allFiles.length === 0) {
+    if (error) {
         return (
             <div className="space-y-6">
                 <div>
@@ -439,7 +420,33 @@ export default function Dashboard() {
                 <Card>
                     <CardContent className="flex flex-col items-center justify-center py-12">
                         <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-medium mb-2">No files uploaded yet</h3>
+                        <h3 className="text-lg font-medium mb-2">Error loading dashboard</h3>
+                        <p className="text-muted-foreground text-center mb-4">
+                            {error}
+                        </p>
+                        <Button onClick={() => window.location.reload()}>
+                            Retry
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
+    // Show message when no data is available
+    if (!allFiles || allFiles.length === 0) {
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+                    <p className="text-muted-foreground">
+                        Overview of your file uploads and analysis activity
+                    </p>
+                </div>
+                <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-12">
+                        <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-medium mb-2">No files found in Supabase</h3>
                         <p className="text-muted-foreground text-center mb-4">
                             Start by uploading some files to see your dashboard analytics and insights.
                         </p>

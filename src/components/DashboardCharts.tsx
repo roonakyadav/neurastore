@@ -30,6 +30,23 @@ const getFileTypeCategory = (type: string) => {
 };
 
 export default function DashboardCharts({ files }: DashboardChartsProps) {
+    // Add validation
+    if (!files || files.length === 0) {
+        return (
+            <div className="grid gap-4 md:grid-cols-2">
+                <Card className="md:col-span-2">
+                    <CardContent className="flex items-center justify-center h-[300px] text-muted-foreground">
+                        <p>No data to display</p>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
+    // Prevent crashes
+    const categories = files.map(f => f.category || 'Uncategorized');
+    const chartData = Array.isArray(categories) ? categories : [];
+
     // AI Category distribution data (using the actual AI classification categories)
     const categoryCounts: { [key: string]: number } = {};
     files.forEach(file => {
