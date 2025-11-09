@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-// Conditionally import pdf-parse to avoid build issues
+// Conditionally import pdf-parse to avoid build issues in production
 let pdfParse: any = null;
-try {
-    pdfParse = require('pdf-parse');
-} catch (error) {
+if (process.env.NODE_ENV !== "production") {
+    try {
+        pdfParse = require('pdf-parse');
+    } catch (error) {
+    }
 }
 
 import ffmpeg from 'fluent-ffmpeg';
@@ -197,6 +199,14 @@ export async function POST(req: Request) {
 
         // Handle PDFs - extract text and classify using sentiment analysis
         if (mimeType === "application/pdf") {
+            if (process.env.NODE_ENV === "production") {
+                return NextResponse.json({
+                    category: "Document",
+                    confidence: 0.9,
+                    tags: ["pdf"],
+                    message: "PDF classified as document (production mode)"
+                });
+            }
             try {
 
                 const fileResponse = await fetch(fileUrl);
