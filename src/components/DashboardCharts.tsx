@@ -30,8 +30,6 @@ const getFileTypeCategory = (type: string) => {
 };
 
 export default function DashboardCharts({ files }: DashboardChartsProps) {
-    console.log('DashboardCharts received files:', files);
-
     // AI Category distribution data (using the actual AI classification categories)
     const categoryCounts: { [key: string]: number } = {};
     files.forEach(file => {
@@ -43,9 +41,6 @@ export default function DashboardCharts({ files }: DashboardChartsProps) {
         name,
         value,
     }));
-
-    console.log('Category counts:', categoryCounts);
-    console.log('File type data for chart:', fileTypeData);
 
     // Upload trend data (last 7 days)
     const uploadTrendData = [];
