@@ -179,24 +179,32 @@ export async function POST(req: Request) {
             }
         }
 
-        // Step 7: Save metadata to database
-
-        const metadata = {
-            name: file.name,
-            mime_type: mimeType,
-            size: file.size,
-            folder_path: folderPath,
+        // Step 7: Normalize data before database insertion
+        const cleanData = {
+            name: file.name || 'unknown_file',
+            size: file.size || 0,
+            mime_type: mimeType || 'application/octet-stream',
+            category: category || 'Unclassified',
+            confidence: confidence ?? 0,
+            uploaded_at: new Date().toISOString(),
             public_url: publicUrl,
-            category,
-            confidence,
+            folder_path: folderPath,
         };
 
+        console.log('Inserting cleaned record:', cleanData);
+
+        // Step 8: Save metadata to database
         let metadataSaved;
         try {
-            metadataSaved = await saveFileMetadata(metadata);
-            if (!metadataSaved) {
-                throw new Error("saveFileMetadata returned false");
+            const { error } = await supabase.from('files_metadata').insert([cleanData]);
+
+            if (error) {
+                console.error('Database metadata save failed:', error);
+                throw new Error(`Database insert failed: ${error.message}`);
             }
+
+            console.log('Metadata saved successfully');
+            metadataSaved = true;
         } catch (error) {
             console.error("Database metadata save failed:", error);
             return NextResponse.json(
