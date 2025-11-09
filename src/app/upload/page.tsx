@@ -117,59 +117,22 @@ export default function UploadPage() {
             const file = uploadFile.file;
             if (!file) throw new Error("No file selected");
 
-            // Classify the file
+            // Use the new unified upload API that handles everything
             const formData = new FormData();
             formData.append('file', file);
-            const classifyRes = await fetch('/api/classify', {
+
+            const uploadRes = await fetch('/api/upload', {
                 method: 'POST',
                 body: formData,
             });
 
-            if (!classifyRes.ok) {
-                throw new Error('Classification failed');
+            if (!uploadRes.ok) {
+                const errorData = await uploadRes.json();
+                throw new Error(errorData.error || 'Upload failed');
             }
 
-            const { category, confidence } = await classifyRes.json();
-
-            // Create folder path
-            const folderPath = `media/${category}`;
-            const filePath = `${folderPath}/${Date.now()}_${file.name}`;
-
-            // Upload to Supabase media bucket
-            const { data, error } = await supabase.storage
-                .from("media")
-                .upload(filePath, file, {
-                    cacheControl: "3600",
-                    upsert: true,
-                });
-
-            if (error) {
-                console.error("Supabase Upload Error:", error.message);
-                throw error;
-            }
-
-            // Get public URL
-            const { data: urlData } = supabase.storage
-                .from("media")
-                .getPublicUrl(filePath);
-
-            // Save metadata
-            const { error: metaError } = await supabase.from("files_metadata").insert([
-                {
-                    name: file.name,
-                    mime_type: file.type || "unknown",
-                    size: file.size,
-                    category,
-                    confidence,
-                    folder_path: folderPath,
-                    public_url: urlData.publicUrl,
-                },
-            ]);
-
-            if (metaError) {
-                console.error("Metadata insert error:", metaError.message);
-                throw metaError;
-            }
+            const uploadData = await uploadRes.json();
+            console.log(`Upload completed: ${uploadData.category} (${uploadData.confidence})`);
 
             // mark as completed
             setUploadFiles(prev =>

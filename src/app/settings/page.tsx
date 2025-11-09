@@ -216,10 +216,15 @@ export default function SettingsPage() {
                                         setClearingHistory(true);
                                         try {
                                             // Delete all files from storage
-                                            const { data: files } = await supabase.from('files_metadata').select('path');
+                                            const { data: files } = await supabase.from('files_metadata').select('public_url');
                                             if (files && files.length > 0) {
                                                 for (const file of files) {
-                                                    await supabase.storage.from('uploads').remove([file.path]);
+                                                    // Parse path from public_url
+                                                    const urlParts = file.public_url.split('/storage/v1/object/public/');
+                                                    if (urlParts.length >= 2) {
+                                                        const path = urlParts[1].split('/').slice(1).join('/');
+                                                        await supabase.storage.from('media').remove([path]);
+                                                    }
                                                 }
                                             }
                                             // Delete all metadata

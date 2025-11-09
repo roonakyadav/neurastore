@@ -11,10 +11,12 @@ import {
     Settings,
     User,
     FileText,
+    Search,
 } from "lucide-react";
 
 const navigation = [
     { name: "Upload", href: "/upload", icon: Upload },
+    { name: "Search", href: "/search", icon: Search },
     { name: "Dashboard", href: "/dashboard", icon: BarChart3 },
     { name: "History", href: "/history", icon: History },
     { name: "Settings", href: "/settings", icon: Settings },

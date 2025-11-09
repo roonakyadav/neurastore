@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { FileText, Upload, HardDrive, TrendingUp, Image, Video, Music, File, Search, Download, Eye, Calendar } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { supabase } from "@/lib/supabaseClient";
+import StatsCard from "@/components/StatsCard";
+import DashboardCharts from "@/components/DashboardCharts";
 
 interface FileMetadata {
     id: number;
@@ -302,57 +303,30 @@ export default function Dashboard() {
 
             {/* Summary Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Files</CardTitle>
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalFiles}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Files uploaded
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
-                        <HardDrive className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatFileSize(stats.totalSize)}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Total file size
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Recent Uploads</CardTitle>
-                        <Upload className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.recentUploads}</div>
-                        <p className="text-xs text-muted-foreground">
-                            Last 7 days
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Analyzed Files</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{stats.analyzedFiles}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {stats.totalFiles > 0 ? Math.round((stats.analyzedFiles / stats.totalFiles) * 100) : 0}% completion
-                        </p>
-                    </CardContent>
-                </Card>
+                <StatsCard
+                    title="Total Files"
+                    value={stats.totalFiles}
+                    icon={FileText}
+                    description="Files uploaded"
+                />
+                <StatsCard
+                    title="Storage Used"
+                    value={formatFileSize(stats.totalSize)}
+                    icon={HardDrive}
+                    description="Total file size"
+                />
+                <StatsCard
+                    title="Recent Uploads"
+                    value={stats.recentUploads}
+                    icon={Upload}
+                    description="Last 7 days"
+                />
+                <StatsCard
+                    title="Analyzed Files"
+                    value={stats.analyzedFiles}
+                    icon={TrendingUp}
+                    description={`${stats.totalFiles > 0 ? Math.round((stats.analyzedFiles / stats.totalFiles) * 100) : 0}% completion`}
+                />
             </div>
 
             {/* Filters */}
@@ -394,63 +368,7 @@ export default function Dashboard() {
             </Card>
 
             {/* Charts */}
-            <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>File Types Distribution</CardTitle>
-                        <CardDescription>
-                            Breakdown of files by type ({timeFilter === 'all' ? 'all time' : `last ${timeFilter === 'today' ? 'day' : timeFilter === '7days' ? '7 days' : '30 days'}`})
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {fileTypeData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={300}>
-                                <PieChart>
-                                    <Pie
-                                        data={fileTypeData}
-                                        cx="50%"
-                                        cy="50%"
-                                        labelLine={false}
-                                        label={({ name, percent }) => `${name} ${((percent as number) * 100).toFixed(0)}%`}
-                                        outerRadius={80}
-                                        fill="#8884d8"
-                                        dataKey="value"
-                                    >
-                                        {fileTypeData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                                No data available
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Upload Trend</CardTitle>
-                        <CardDescription>
-                            Daily uploads over the last 7 days
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={uploadTrendData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis />
-                                <Tooltip />
-                                <Bar dataKey="uploads" fill="#8884d8" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-            </div>
+            <DashboardCharts files={filteredFiles} />
 
             {/* File Inspection Table */}
             <Card>

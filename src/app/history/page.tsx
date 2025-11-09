@@ -12,11 +12,10 @@ import { useToast } from "@/components/ui/toast";
 interface FileMetadata {
     id: string;
     name: string;
-    type: string;
-    size_bytes: number;
+    mime_type: string;
+    size: number;
     uploaded_at: string;
-    bucket: string;
-    path: string;
+    public_url: string;
     analysis_result?: any;
 }
 
@@ -63,13 +62,11 @@ export default function HistoryPage() {
 
     const handleDownload = async (file: FileMetadata) => {
         try {
-            const { data, error } = await supabase.storage
-                .from(file.bucket)
-                .download(file.path);
+            const response = await fetch(file.public_url);
+            if (!response.ok) throw new Error('Download failed');
 
-            if (error) throw error;
-
-            const url = URL.createObjectURL(data);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = file.name;
@@ -85,8 +82,14 @@ export default function HistoryPage() {
     const handleDelete = async (file: FileMetadata) => {
         setDeletingFile(file.id);
         try {
+            // Parse path from public_url
+            // public_url: https://.../storage/v1/object/public/media/media/category/filename
+            const urlParts = file.public_url.split('/storage/v1/object/public/');
+            if (urlParts.length < 2) throw new Error('Invalid public URL');
+            const path = urlParts[1].split('/').slice(1).join('/'); // remove bucket
+
             // Delete from storage
-            await supabase.storage.from(file.bucket).remove([file.path]);
+            await supabase.storage.from('media').remove([path]);
 
             // Delete metadata
             await supabase.from('files_metadata').delete().eq('id', file.id);
@@ -131,7 +134,7 @@ export default function HistoryPage() {
             ) : (
                 <div className="grid gap-4">
                     {files.map((file) => {
-                        const FileIcon = getFileIcon(file.type);
+                        const FileIcon = getFileIcon(file.mime_type);
                         return (
                             <Card key={file.id}>
                                 <CardHeader className="pb-3">
@@ -141,7 +144,7 @@ export default function HistoryPage() {
                                             <div>
                                                 <CardTitle className="text-lg">{file.name}</CardTitle>
                                                 <CardDescription>
-                                                    {formatFileSize(file.size_bytes)} • {file.type} • {new Date(file.uploaded_at).toLocaleDateString()}
+                                                    {formatFileSize(file.size)} • {file.mime_type} • {new Date(file.uploaded_at).toLocaleDateString()}
                                                 </CardDescription>
                                             </div>
                                         </div>
