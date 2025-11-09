@@ -30,23 +30,15 @@ const getFileTypeCategory = (type: string) => {
     return 'Other';
 };
 
-export default function DashboardCharts({ files }: DashboardChartsProps) {
-    if (!files || !Array.isArray(files)) return <p>No data to visualize.</p>;
-    // Add validation
+export default function DashboardCharts({ files }: { files: any[] }) {
     if (!files || files.length === 0) {
-        return (
-            <div className="grid gap-4 md:grid-cols-2">
-                <Card className="md:col-span-2">
-                    <CardContent className="flex items-center justify-center h-[300px] text-muted-foreground">
-                        <p>No data to display</p>
-                    </CardContent>
-                </Card>
-            </div>
-        );
+        return <p className="text-gray-400">No data available.</p>;
     }
 
-    // Before mapping data:
-    const safeFiles = files.filter(f => !!f.category);
+    const safeFiles = files.filter(f => !!f.category && f.category !== "Unclassified");
+    if (safeFiles.length === 0) {
+        return <p className="text-gray-400">No classified data to display.</p>;
+    }
 
     // Protect all chart mappings with safe data handling
     const dataByCategory = safeFiles?.reduce((acc: Record<string, number>, file) => {
@@ -89,7 +81,7 @@ export default function DashboardCharts({ files }: DashboardChartsProps) {
     const tagCounts: { [key: string]: number } = {};
     safeFiles.forEach(file => {
         if (file.ai_tags && Array.isArray(file.ai_tags)) {
-            file.ai_tags.forEach(tag => {
+            file.ai_tags.forEach((tag: string) => {
                 tagCounts[tag] = (tagCounts[tag] || 0) + 1;
             });
         }
