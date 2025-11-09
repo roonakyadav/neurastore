@@ -157,32 +157,21 @@ export default function DashboardCharts({ files, onAnalyzeJSON }: { files: any[]
                                 <p className="text-sm font-medium truncate">{file.name}</p>
                                 <p className="text-xs text-gray-400">{file.category || "Uncategorized"} • {(file.size / 1024).toFixed(2)} KB</p>
 
-                                {/* File Tag */}
-                                <span className="inline-block mt-2 text-xs bg-gray-700 px-2 py-0.5 rounded">
-                                    {file.category || "Unclassified"}
-                                </span>
-
-                                {/* Action Buttons */}
-                                <div className="flex gap-2 mt-3">
-                                    <button
-                                        onClick={() => window.open(file.public_url, "_blank")}
-                                        className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded"
+                                {/* File Category Badge */}
+                                <div className="mt-3 flex justify-between items-center">
+                                    <span
+                                        className={`text-xs font-medium px-3 py-1 rounded-full ${file.name.endsWith(".json")
+                                                ? "bg-yellow-600/20 text-yellow-400 border border-yellow-500/50"
+                                                : "bg-blue-600/20 text-blue-400 border border-blue-500/50"
+                                            }`}
                                     >
-                                        Preview
-                                    </button>
-
-                                    <a
-                                        href={file.public_url}
-                                        download={file.name}
-                                        className="text-xs bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded"
-                                    >
-                                        Download
-                                    </a>
+                                        {file.category || "Unclassified"}
+                                    </span>
 
                                     {file.name.endsWith(".json") && (
                                         <button
                                             onClick={() => onAnalyzeJSON(file)}
-                                            className="text-xs bg-yellow-600 hover:bg-yellow-500 text-white px-2 py-1 rounded"
+                                            className="text-xs px-3 py-1 rounded-md bg-yellow-600 hover:bg-yellow-500 text-white transition"
                                         >
                                             Analyze
                                         </button>
