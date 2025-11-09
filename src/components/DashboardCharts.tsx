@@ -30,17 +30,22 @@ const getFileTypeCategory = (type: string) => {
 };
 
 export default function DashboardCharts({ files }: DashboardChartsProps) {
-    // File type distribution data
-    const fileTypeCounts: { [key: string]: number } = {};
+    console.log('DashboardCharts received files:', files);
+
+    // AI Category distribution data (using the actual AI classification categories)
+    const categoryCounts: { [key: string]: number } = {};
     files.forEach(file => {
-        const category = getFileTypeCategory(file.mime_type);
-        fileTypeCounts[category] = (fileTypeCounts[category] || 0) + 1;
+        const category = file.category || 'Uncategorized';
+        categoryCounts[category] = (categoryCounts[category] || 0) + 1;
     });
 
-    const fileTypeData = Object.entries(fileTypeCounts).map(([name, value]) => ({
+    const fileTypeData = Object.entries(categoryCounts).map(([name, value]) => ({
         name,
         value,
     }));
+
+    console.log('Category counts:', categoryCounts);
+    console.log('File type data for chart:', fileTypeData);
 
     // Upload trend data (last 7 days)
     const uploadTrendData = [];
@@ -96,7 +101,7 @@ export default function DashboardCharts({ files }: DashboardChartsProps) {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>File Type Distribution</CardTitle>
+                    <CardTitle>AI Category Distribution</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {fileTypeData.length > 0 ? (

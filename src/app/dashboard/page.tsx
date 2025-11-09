@@ -141,6 +141,7 @@ export default function Dashboard() {
                 .order('uploaded_at', { ascending: false });
 
             if (error) throw error;
+            console.log('Fetched files data:', data);
             setAllFiles(data || []);
         } catch (error) {
             console.error('Error fetching files:', error);
