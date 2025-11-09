@@ -31,7 +31,6 @@ export default function UploadAnalysisModal({
     const [tags, setTags] = useState<Record<string, string>>({});
 
     useEffect(() => {
-        console.log("Loaded HF API key:", process.env.NEXT_PUBLIC_HF_API_KEY);
     }, []);
 
     // ✅ Proper AI tagging using zero-shot-classification
@@ -74,8 +73,12 @@ export default function UploadAnalysisModal({
                     const result = await response.json();
                     let tagText = 'General';
 
-                    if (result?.labels && result?.labels.length > 0) {
+                    // Handle both successful responses and fallback responses
+                    if (result?.labels && Array.isArray(result.labels) && result.labels.length > 0) {
                         tagText = result.labels[0];
+                    } else if (result?.fallback) {
+                        // This is a fallback response due to API failure
+                        tagText = 'General';
                     }
 
                     newTags[name] = tagText;

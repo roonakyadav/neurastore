@@ -19,7 +19,6 @@ export default function FileUpload({ onUpload }: { onUpload: (files: any[]) => v
                     .upload(`public/${file.name}`, file, { upsert: true });
 
                 if (error) console.error("Upload Error:", error.message);
-                else console.log("Uploaded:", data);
                 if (error) throw error;
 
                 // Analyze file using /api/analyze

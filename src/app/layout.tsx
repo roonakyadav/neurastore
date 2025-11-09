@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { MainLayout } from "@/components/MainLayout";
 import "./globals.css";
 import { ClientProviders } from "@/components/ClientProviders";
+import { DevOverlayDisabler } from "@/components/DevOverlayDisabler";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,6 +39,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ClientProviders>
+            <DevOverlayDisabler />
             <MainLayout>{children}</MainLayout>
           </ClientProviders>
         </ThemeProvider>

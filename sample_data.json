@@ -1,0 +1,122 @@
+{
+    "users": [
+        {
+            "id": 1,
+            "name": "John Doe",
+            "email": "john@example.com",
+            "profile": {
+                "age": 30,
+                "city": "New York",
+                "interests": [
+                    "reading",
+                    "coding",
+                    "gaming"
+                ],
+                "social": {
+                    "twitter": "@johndoe",
+                    "github": "johndoe",
+                    "linkedin": "john-doe"
+                }
+            },
+            "posts": [
+                {
+                    "id": 101,
+                    "title": "My First Post",
+                    "content": "This is my first blog post",
+                    "tags": [
+                        "introduction",
+                        "blog"
+                    ],
+                    "published": true,
+                    "created_at": "2023-01-15T10:00:00Z",
+                    "metadata": {
+                        "views": 150,
+                        "likes": 25,
+                        "comments": 5
+                    }
+                },
+                {
+                    "id": 102,
+                    "title": "Advanced JavaScript",
+                    "content": "Exploring advanced JavaScript concepts",
+                    "tags": [
+                        "javascript",
+                        "programming",
+                        "tutorial"
+                    ],
+                    "published": true,
+                    "created_at": "2023-02-20T14:30:00Z",
+                    "metadata": {
+                        "views": 320,
+                        "likes": 67,
+                        "comments": 12
+                    }
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "name": "Jane Smith",
+            "email": "jane@example.com",
+            "profile": {
+                "age": 28,
+                "city": "San Francisco",
+                "interests": [
+                    "design",
+                    "photography",
+                    "travel"
+                ],
+                "social": {
+                    "twitter": "@janesmith",
+                    "dribbble": "janesmith",
+                    "instagram": "jane_smith"
+                }
+            },
+            "posts": [
+                {
+                    "id": 201,
+                    "title": "UI/UX Design Trends",
+                    "content": "Latest trends in user interface design",
+                    "tags": [
+                        "design",
+                        "ui",
+                        "ux",
+                        "trends"
+                    ],
+                    "published": true,
+                    "created_at": "2023-03-10T09:15:00Z",
+                    "metadata": {
+                        "views": 450,
+                        "likes": 89,
+                        "comments": 23
+                    }
+                }
+            ]
+        }
+    ],
+    "settings": {
+        "theme": "dark",
+        "notifications": {
+            "email": true,
+            "push": false,
+            "sms": true
+        },
+        "privacy": {
+            "profile_visible": true,
+            "email_visible": false,
+            "posts_public": true
+        }
+    },
+    "metadata": {
+        "version": "1.0.0",
+        "last_updated": "2023-12-01T12:00:00Z",
+        "total_users": 2,
+        "total_posts": 3,
+        "features": [
+            "user_management",
+            "content_creation",
+            "social_features",
+            "analytics"
+        ]
+    }
+}

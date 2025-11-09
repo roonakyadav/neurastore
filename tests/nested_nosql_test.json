@@ -1,0 +1,58 @@
+{
+    "users": [
+        {
+            "id": 1,
+            "name": "John Doe",
+            "profile": {
+                "email": "john@example.com",
+                "age": 30,
+                "address": {
+                    "street": "123 Main St",
+                    "city": "New York",
+                    "country": "USA"
+                }
+            },
+            "preferences": {
+                "notifications": true,
+                "theme": "dark",
+                "languages": [
+                    "en",
+                    "es"
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "name": "Jane Smith",
+            "profile": {
+                "email": "jane@example.com",
+                "age": 25,
+                "address": {
+                    "street": "456 Oak Ave",
+                    "city": "Los Angeles",
+                    "country": "USA"
+                }
+            },
+            "preferences": {
+                "notifications": false,
+                "theme": "light",
+                "languages": [
+                    "en",
+                    "fr"
+                ]
+            }
+        }
+    ],
+    "metadata": {
+        "version": "1.0",
+        "created": "2025-11-09",
+        "settings": {
+            "maxUsers": 1000,
+            "features": [
+                "profiles",
+                "preferences",
+                "notifications"
+            ]
+        }
+    }
+}

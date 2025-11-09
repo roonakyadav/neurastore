@@ -26,7 +26,6 @@ export async function detectMimeType(buffer: Buffer, filename: string): Promise<
         const result = await fileTypeFromBuffer(buffer);
         return result?.mime || getMimeTypeFromExtension(filename);
     } catch (error) {
-        console.warn('File type detection failed, falling back to extension:', error);
         return getMimeTypeFromExtension(filename);
     }
 }

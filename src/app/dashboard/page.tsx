@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,10 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FileText, Upload, HardDrive, TrendingUp, Image, Video, Music, File, Search, Download, Eye, Calendar } from "lucide-react";
+import { FileText, Upload, HardDrive, TrendingUp, Image, Video, Music, File, Search, Download, Eye, Calendar, FileJson } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import StatsCard from "@/components/StatsCard";
 import DashboardCharts from "@/components/DashboardCharts";
+import SchemaView from "@/components/SchemaView";
 
 interface FileMetadata {
     id: number;
@@ -74,6 +76,7 @@ const getCategoryColor = (category: string) => {
 type TimeFilter = 'today' | '7days' | '30days' | 'all';
 
 export default function Dashboard() {
+    const router = useRouter();
     const [stats, setStats] = useState<DashboardStats>({
         totalFiles: 0,
         totalSize: 0,
@@ -92,6 +95,10 @@ export default function Dashboard() {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [selectedFile, setSelectedFile] = useState<FileMetadata | null>(null);
     const [filePreview, setFilePreview] = useState<string | null>(null);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+    const [schemaViewFile, setSchemaViewFile] = useState<FileMetadata | null>(null);
+    const [isSchemaViewOpen, setIsSchemaViewOpen] = useState(false);
 
     useEffect(() => {
         fetchAllFiles();
@@ -105,7 +112,26 @@ export default function Dashboard() {
     useEffect(() => {
         applyFilters();
         localStorage.setItem('dashboard-time-filter', timeFilter);
-    }, [timeFilter, categoryFilter, allFiles, searchQuery, sortBy, sortOrder]);
+    }, [timeFilter, categoryFilter, allFiles, sortBy, sortOrder]);
+
+    // Debounced search effect
+    useEffect(() => {
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+
+        const timeout = setTimeout(() => {
+            performSearch();
+        }, 300); // 300ms debounce
+
+        setSearchTimeout(timeout);
+
+        return () => {
+            if (timeout) {
+                clearTimeout(timeout);
+            }
+        };
+    }, [searchQuery]);
 
     const fetchAllFiles = async () => {
         try {
@@ -143,6 +169,77 @@ export default function Dashboard() {
         }
     };
 
+    const performSearch = async () => {
+        if (!searchQuery.trim()) {
+            // If no search query, use client-side filtering
+            applyFilters();
+            return;
+        }
+
+        setIsSearching(true);
+        try {
+            const params = new URLSearchParams({
+                q: searchQuery.trim(),
+                limit: '1000' // Large limit for dashboard
+            });
+
+            const response = await fetch(`/api/search?${params}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Search failed');
+            }
+
+            // Apply client-side filters to search results
+            let filtered = data.results;
+
+            // Apply time filter
+            const dateRange = getDateRange(timeFilter);
+            if (dateRange) {
+                filtered = filtered.filter((file: FileMetadata) => file.uploaded_at >= dateRange);
+            }
+
+            // Apply category filter
+            if (categoryFilter !== 'all') {
+                filtered = filtered.filter((file: FileMetadata) => file.category === categoryFilter);
+            }
+
+            // Apply sorting
+            filtered.sort((a: FileMetadata, b: FileMetadata) => {
+                let aValue: any, bValue: any;
+                switch (sortBy) {
+                    case 'name':
+                        aValue = a.name.toLowerCase();
+                        bValue = b.name.toLowerCase();
+                        break;
+                    case 'size':
+                        aValue = a.size;
+                        bValue = b.size;
+                        break;
+                    case 'uploaded_at':
+                        aValue = new Date(a.uploaded_at);
+                        bValue = new Date(b.uploaded_at);
+                        break;
+                    default:
+                        return 0;
+                }
+
+                if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+                if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            setFilteredFiles(filtered);
+            updateStatsAndCharts(filtered);
+        } catch (error) {
+            console.error('Search error:', error);
+            // Fallback to client-side filtering on error
+            applyFilters();
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
     const applyFilters = () => {
         let filtered = [...allFiles];
 
@@ -157,11 +254,11 @@ export default function Dashboard() {
             filtered = filtered.filter(file => file.category === categoryFilter);
         }
 
-        // Apply search filter
+        // Apply search filter (client-side fallback)
         if (searchQuery) {
             filtered = filtered.filter(file =>
                 file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                file.mime_type.toLowerCase().includes(searchQuery.toLowerCase())
+                file.category.toLowerCase().includes(searchQuery.toLowerCase())
             );
         }
 
@@ -526,6 +623,19 @@ export default function Dashboard() {
                                                                 )}
                                                             </DialogContent>
                                                         </Dialog>
+                                                        {file.mime_type === 'application/json' && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setSchemaViewFile(file);
+                                                                    setIsSchemaViewOpen(true);
+                                                                }}
+                                                                title="View JSON Schema"
+                                                            >
+                                                                <FileJson className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -550,6 +660,20 @@ export default function Dashboard() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Schema View Modal */}
+            {schemaViewFile && (
+                <SchemaView
+                    isOpen={isSchemaViewOpen}
+                    onClose={() => {
+                        setIsSchemaViewOpen(false);
+                        setSchemaViewFile(null);
+                    }}
+                    fileUrl={schemaViewFile.public_url}
+                    fileName={schemaViewFile.name}
+                    fileId={schemaViewFile.id.toString()}
+                />
+            )}
         </div>
     );
 }

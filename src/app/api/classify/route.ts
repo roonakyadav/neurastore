@@ -1,4 +1,12 @@
 import { NextResponse } from "next/server";
+// Conditionally import pdf-parse to avoid build issues
+let pdfParse: any = null;
+try {
+    pdfParse = require('pdf-parse');
+} catch (error) {
+}
+
+import ffmpeg from 'fluent-ffmpeg';
 export const runtime = "nodejs";
 
 // Enhanced category mapping based on MIME types and file extensions
@@ -187,8 +195,173 @@ export async function POST(req: Request) {
             });
         }
 
+        // Handle PDFs - extract text and classify using sentiment analysis
+        if (mimeType === "application/pdf") {
+            try {
+
+                const fileResponse = await fetch(fileUrl);
+                if (!fileResponse.ok) {
+                    throw new Error("Failed to fetch PDF file");
+                }
+
+                const buffer = Buffer.from(await fileResponse.arrayBuffer());
+
+                // Add timeout and error handling for PDF parsing
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+                try {
+                    const pdfData = await pdfParse(buffer);
+                    clearTimeout(timeout);
+
+                    const extractedText = pdfData.text;
+
+                    if (extractedText && extractedText.length > 10) {
+                        // Use Hugging Face sentiment analysis for document classification
+                        const key = process.env.NEXT_PUBLIC_HF_API_KEY;
+                        if (key) {
+                            const sentimentController = new AbortController();
+                            const sentimentTimeout = setTimeout(() => sentimentController.abort(), 15000);
+
+                            try {
+                                const sentimentRes = await fetch(
+                                    "https://router.huggingface.co/hf-inference/models/distilbert-base-uncased-finetuned-sst-2-english",
+                                    {
+                                        method: "POST",
+                                        headers: {
+                                            Authorization: `Bearer ${key}`,
+                                            "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify({
+                                            inputs: extractedText.substring(0, 512), // Limit text length
+                                        }),
+                                        signal: sentimentController.signal,
+                                    }
+                                );
+
+                                clearTimeout(sentimentTimeout);
+
+                                if (sentimentRes.ok) {
+                                    const sentimentResult = await sentimentRes.json();
+                                    if (Array.isArray(sentimentResult) && sentimentResult.length > 0) {
+                                        const result = sentimentResult[0];
+                                        if (Array.isArray(result)) {
+                                            // Find the label with highest score
+                                            const bestLabel = result.reduce((best, current) =>
+                                                current.score > best.score ? current : best
+                                            );
+                                            return NextResponse.json({
+                                                category: bestLabel.label === "POSITIVE" ? "Positive Document" : "Document",
+                                                confidence: bestLabel.score,
+                                                tags: ["pdf", "document"],
+                                                message: "PDF text analyzed and classified"
+                                            });
+                                        }
+                                    }
+                                }
+                            } catch (sentimentError: any) {
+                                clearTimeout(sentimentTimeout);
+                            }
+                        }
+                    }
+                } catch (pdfError: any) {
+                    clearTimeout(timeout);
+                }
+
+                // Fallback to basic PDF classification
+                return NextResponse.json({
+                    category: "Document",
+                    confidence: 0.9,
+                    tags: ["pdf"],
+                    message: "PDF classified as document"
+                });
+            } catch (error) {
+                console.error("PDF processing failed:", error);
+                return NextResponse.json({
+                    category: "Document",
+                    confidence: 0.7,
+                    tags: ["pdf"],
+                    message: "PDF classification fallback"
+                });
+            }
+        }
+
+        // Handle Videos - extract metadata using ffmpeg
+        if (mimeType.startsWith("video/")) {
+            try {
+
+                // For video classification, we'll use basic MIME type detection
+                // since ffmpeg requires file system access which we don't have with URLs
+                return NextResponse.json({
+                    category: "Video",
+                    confidence: 0.95,
+                    tags: ["video", mimeType.split('/')[1]],
+                    message: "Video classified by MIME type"
+                });
+            } catch (error) {
+                console.error("Video processing failed:", error);
+                return NextResponse.json({
+                    category: "Video",
+                    confidence: 0.8,
+                    tags: ["video"],
+                    message: "Video classification fallback"
+                });
+            }
+        }
+
+        // Handle JSON files - detect structure and analyze schema
+        if (mimeType === "application/json") {
+            try {
+
+                const fileResponse = await fetch(fileUrl);
+                if (!fileResponse.ok) {
+                    throw new Error("Failed to fetch JSON file");
+                }
+
+                const jsonText = await fileResponse.text();
+                const jsonData = JSON.parse(jsonText);
+
+                // Determine if it's an object or array
+                const isArray = Array.isArray(jsonData);
+                const category = isArray ? "JSON Array" : "JSON Object";
+
+                // Use schema inference to analyze structure
+                try {
+                    // Import the schema generator dynamically to avoid circular imports
+                    const { processJSONFile } = await import('@/lib/utils/schemaGenerator');
+                    const schemaAnalysis = await processJSONFile(jsonText, "temp");
+
+                    if (schemaAnalysis) {
+                        return NextResponse.json({
+                            category: `${category} (${schemaAnalysis.storageType})`,
+                            confidence: 0.95,
+                            tags: ["json", isArray ? "array" : "object", schemaAnalysis.storageType.toLowerCase()],
+                            schema: schemaAnalysis,
+                            message: "JSON structure and schema analyzed"
+                        });
+                    }
+                } catch (schemaError) {
+                }
+
+                // Fallback classification
+                return NextResponse.json({
+                    category: category,
+                    confidence: 0.9,
+                    tags: ["json", isArray ? "array" : "object"],
+                    message: "JSON classified by structure"
+                });
+            } catch (error) {
+                console.error("JSON processing failed:", error);
+                return NextResponse.json({
+                    category: "JSON",
+                    confidence: 0.6,
+                    tags: ["json"],
+                    message: "JSON classification fallback"
+                });
+            }
+        }
+
         // For non-image files, use intelligent auto-tagging
-        console.log("Auto-tagging non-image file using MIME type detection");
 
         // Get category from MIME type mapping
         const mapping = categoryMap[mimeType] || { category: "Other", confidence: 0.8 };
@@ -199,7 +372,6 @@ export async function POST(req: Request) {
         // Enhanced classification for documents with text analysis
         if (mimeType === 'application/pdf' || mimeType.includes('document') || mimeType.startsWith('text/')) {
             try {
-                console.log("Attempting text extraction for document classification");
 
                 // Fetch the file content
                 const fileResponse = await fetch(fileUrl);
@@ -213,10 +385,8 @@ export async function POST(req: Request) {
                 // Extract text based on file type
                 if (mimeType.startsWith('text/')) {
                     extractedText = buffer.toString('utf-8');
-                    console.log(`Text file content loaded: ${extractedText.length} characters`);
                 } else {
                     // For binary files like PDFs, use filename-based classification only
-                    console.log("Using filename-based classification for binary document");
                 }
 
                 // Analyze extracted text for document type
@@ -226,11 +396,9 @@ export async function POST(req: Request) {
                         finalCategory = textAnalysis.category;
                         finalConfidence = Math.max(mapping.confidence, textAnalysis.confidence);
                         documentTags = textAnalysis.tags;
-                        console.log(`Document classified as: ${finalCategory} (confidence: ${finalConfidence})`);
                     }
                 }
             } catch (error) {
-                console.warn("Text extraction failed, using basic MIME type classification:", error);
             }
         }
 
@@ -239,7 +407,6 @@ export async function POST(req: Request) {
         const keywordTags = getKeywordTags(filename);
         const allTags = [...documentTags, ...keywordTags];
 
-        console.log(`Auto-tagged non-image file: ${finalCategory} (confidence ${finalConfidence})`);
 
         return NextResponse.json({
             category: finalCategory,

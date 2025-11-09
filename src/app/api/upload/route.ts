@@ -1,65 +1,199 @@
 import { NextResponse } from "next/server";
 import { detectMimeType, getFolderPath, generateFilePath, uploadToSupabase, saveFileMetadata } from "@/lib/utils/fileHandler";
 import { processJSONFile, saveJSONSchema } from "@/lib/utils/schemaGenerator";
+import { supabase } from "@/lib/supabaseClient";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-    try {
-        const formData = await req.formData();
-        const file = formData.get("file") as File | null;
+    let file: File | null = null;
+    let buffer: Buffer | null = null;
 
-        if (!file) {
+    try {
+        // Parse form data
+        let formData: FormData;
+        try {
+            formData = await req.formData();
+        } catch (error) {
+            console.error("Form data parsing failed:", error);
             return NextResponse.json(
-                { error: "No file uploaded" },
+                { error: "Invalid form data", code: "INVALID_FORM_DATA" },
                 { status: 400 }
             );
         }
 
-        console.log(`Processing upload: ${file.name} (${file.size} bytes)`);
+        file = formData.get("file") as File | null;
+        if (!file) {
+            return NextResponse.json(
+                { error: "No file uploaded", code: "NO_FILE" },
+                { status: 400 }
+            );
+        }
 
-        // Step 1: Detect MIME type
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const mimeType = await detectMimeType(buffer, file.name);
-        console.log(`Detected MIME type: ${mimeType}`);
+        // Validate file size (50MB limit)
+        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+        if (file.size > MAX_FILE_SIZE) {
+            return NextResponse.json(
+                { error: "File too large. Maximum size is 50MB", code: "FILE_TOO_LARGE" },
+                { status: 413 }
+            );
+        }
 
-        // Step 2: Determine folder path
+
+
+        // Step 1: Read file buffer
+        try {
+            buffer = Buffer.from(await file.arrayBuffer());
+        } catch (error) {
+            console.error("File buffer reading failed:", error);
+            return NextResponse.json(
+                { error: "Failed to read file data", code: "FILE_READ_ERROR" },
+                { status: 400 }
+            );
+        }
+
+        // Step 1.5: Calculate file checksum for deduplication
+        const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
+
+        // Check for duplicate files
+        const { data: existingFile, error: dupError } = await supabase
+            .from('files_metadata')
+            .select('id, name, public_url, category, confidence, storage_type, schema_id, table_name, folder_path, mime_type, size')
+            .eq('name', file.name)
+            .eq('size', file.size)
+            .single();
+
+        if (!dupError && existingFile) {
+            return NextResponse.json({
+                success: true,
+                message: "File already exists",
+                category: existingFile.category,
+                confidence: existingFile.confidence,
+                publicUrl: existingFile.public_url,
+                folderPath: existingFile.folder_path,
+                mimeType: existingFile.mime_type,
+                size: existingFile.size,
+                duplicate: true,
+                file_id: existingFile.id
+            });
+        }
+
+        // Step 2: Detect MIME type
+        let mimeType: string;
+        try {
+            mimeType = await detectMimeType(buffer, file.name);
+        } catch (error) {
+            console.error("MIME type detection failed:", error);
+            return NextResponse.json(
+                { error: "Failed to detect file type", code: "MIME_DETECTION_FAILED" },
+                { status: 400 }
+            );
+        }
+
+        // Step 3: Determine folder path
         const folderPath = getFolderPath(mimeType);
-        console.log(`Assigned folder: ${folderPath}`);
 
-        // Step 3: Generate unique file path
+        // Step 4: Generate unique file path
         const filePath = generateFilePath(file.name, folderPath);
 
-        // Step 4: Upload to Supabase Storage
-        console.log(`Uploading to Supabase: ${filePath}`);
-        const uploadResult = await uploadToSupabase(buffer, filePath, mimeType);
-
-        if (!uploadResult) {
+        // Step 5: Upload to Supabase Storage
+        let uploadResult;
+        try {
+            uploadResult = await uploadToSupabase(buffer, filePath, mimeType);
+            if (!uploadResult) {
+                throw new Error("Upload returned null result");
+            }
+        } catch (error) {
+            console.error("Supabase storage upload failed:", error);
             return NextResponse.json(
-                { error: "Failed to upload file to storage" },
+                { error: "Failed to upload file to storage. Please check your connection and try again.", code: "STORAGE_UPLOAD_FAILED" },
                 { status: 500 }
             );
         }
 
         const { publicUrl } = uploadResult;
-        console.log(`File uploaded successfully: ${publicUrl}`);
 
-        // Step 5: Classify the file
-        console.log(`Starting classification for: ${mimeType}`);
-
+        // Step 6: Classify the file
         let category = "Unclassified";
         let confidence = 0;
 
         if (mimeType === "application/json") {
-            // Special handling for JSON files
+            // Special handling for JSON files - use new analysis API
             try {
                 const jsonContent = buffer.toString('utf-8');
-                const schemaAnalysis = await processJSONFile(jsonContent, "temp");
 
-                if (schemaAnalysis) {
-                    category = `JSON (${schemaAnalysis.storageType})`;
+                // First save basic metadata to get file_id
+                const basicMetadata = {
+                    name: file.name,
+                    mime_type: mimeType,
+                    size: file.size,
+                    folder_path: folderPath,
+                    public_url: publicUrl,
+                    category: "JSON (Analyzing...)",
+                    confidence: 0.5,
+                };
+
+                const tempMetadata = await saveFileMetadata(basicMetadata);
+                if (!tempMetadata) {
+                    throw new Error("Failed to save temporary metadata");
+                }
+
+                // Get the file_id from the inserted record
+                const { data: fileRecord } = await supabase
+                    .from('files_metadata')
+                    .select('id')
+                    .eq('name', file.name)
+                    .eq('public_url', publicUrl)
+                    .order('uploaded_at', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                if (!fileRecord) {
+                    throw new Error("Failed to retrieve file record");
+                }
+
+                // Call analyze-json API
+                const origin = req.headers.get('origin') || 'http://localhost:3000';
+                const analysisResponse = await fetch(`${origin}/api/analyze-json`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        file_id: fileRecord.id,
+                        content: jsonContent
+                    }),
+                });
+
+                if (analysisResponse.ok) {
+                    const analysisData = await analysisResponse.json();
+                    category = `JSON (${analysisData.storage_type})`;
                     confidence = 0.95;
-                    console.log(`JSON schema analyzed: ${schemaAnalysis.storageType} storage recommended`);
+
+                    // If it's SQL type, automatically create the table and insert data
+                    if (analysisData.storage_type === 'SQL') {
+                        try {
+                            const createTableResponse = await fetch(`${origin}/api/create-sql-table`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    file_id: fileRecord.id
+                                }),
+                            });
+
+                            if (createTableResponse.ok) {
+                                const createTableData = await createTableResponse.json();
+                            } else {
+                            }
+                        } catch (createTableError) {
+                        }
+                    }
+                } else {
+                    category = "JSON (Analysis Failed)";
+                    confidence = 0.3;
                 }
             } catch (error) {
                 console.error("JSON processing failed:", error);
@@ -69,7 +203,8 @@ export async function POST(req: Request) {
         } else {
             // Use classification API for other file types
             try {
-                const classifyResponse = await fetch(`${req.headers.get('origin') || 'http://localhost:3000'}/api/classify`, {
+                const origin = req.headers.get('origin') || 'http://localhost:3000';
+                const classifyResponse = await fetch(`${origin}/api/classify`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -85,15 +220,20 @@ export async function POST(req: Request) {
                     category = classifyData.category || "Unclassified";
                     confidence = classifyData.confidence || 0;
                 } else {
-                    console.warn("Classification failed, using fallback category");
+                    const errorText = await classifyResponse.text();
+                    // Don't fail the upload for classification issues
+                    category = "Unclassified";
+                    confidence = 0;
                 }
             } catch (error) {
                 console.error("Classification request failed:", error);
+                // Don't fail the upload for classification issues
+                category = "Unclassified";
+                confidence = 0;
             }
         }
 
-        // Step 6: Save metadata to database
-        console.log(`Saving metadata: category=${category}, confidence=${confidence}`);
+        // Step 7: Save metadata to database
 
         const metadata = {
             name: file.name,
@@ -105,16 +245,24 @@ export async function POST(req: Request) {
             confidence,
         };
 
-        const metadataSaved = await saveFileMetadata(metadata);
-
-        if (!metadataSaved) {
+        let metadataSaved;
+        try {
+            metadataSaved = await saveFileMetadata(metadata);
+            if (!metadataSaved) {
+                throw new Error("saveFileMetadata returned false");
+            }
+        } catch (error) {
+            console.error("Database metadata save failed:", error);
             return NextResponse.json(
-                { error: "Failed to save file metadata" },
+                {
+                    error: "Failed to save file information. The file was uploaded but metadata could not be saved.",
+                    code: "METADATA_SAVE_FAILED",
+                    publicUrl // Include public URL so user can still access the file
+                },
                 { status: 500 }
             );
         }
 
-        console.log(`✅ Upload completed successfully: ${file.name}`);
 
         return NextResponse.json({
             success: true,
@@ -129,9 +277,33 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error("Upload processing failed:", error);
+
+        // Determine error type and provide appropriate response
+        let statusCode = 500;
+        let errorCode = "UNKNOWN_ERROR";
+        let errorMessage = "An unexpected error occurred during upload";
+
+        if (error.message?.includes("network") || error.message?.includes("fetch")) {
+            statusCode = 503;
+            errorCode = "NETWORK_ERROR";
+            errorMessage = "Network error. Please check your connection and try again.";
+        } else if (error.message?.includes("timeout")) {
+            statusCode = 408;
+            errorCode = "TIMEOUT_ERROR";
+            errorMessage = "Upload timed out. Please try again.";
+        } else if (error.message?.includes("quota") || error.message?.includes("limit")) {
+            statusCode = 413;
+            errorCode = "QUOTA_EXCEEDED";
+            errorMessage = "Storage quota exceeded. Please contact support.";
+        }
+
         return NextResponse.json(
-            { error: `Upload failed: ${error.message}` },
-            { status: 500 }
+            {
+                error: errorMessage,
+                code: errorCode,
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            },
+            { status: statusCode }
         );
     }
 }

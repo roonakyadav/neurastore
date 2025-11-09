@@ -45,6 +45,7 @@ export default function UploadPage() {
     const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
     const [folderName, setFolderName] = useState<string>('');
     const [showAnalysis, setShowAnalysis] = useState(false);
+    const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set());
 
     const handleFileSelect = useCallback((files: FileList | null) => {
         if (!files) return;
@@ -56,7 +57,23 @@ export default function UploadPage() {
             status: 'pending' as const,
         }));
 
-        setUploadFiles(prev => [...prev, ...newFiles]);
+        setUploadFiles(prev => {
+            const updatedFiles = [...prev];
+            newFiles.forEach(newFile => {
+                const existingIndex = updatedFiles.findIndex(f => f.file.name === newFile.file.name && f.file.size === newFile.file.size);
+                if (existingIndex === -1) {
+                    // File doesn't exist, add it
+                    updatedFiles.push(newFile);
+                } else {
+                    // File exists, update its status to pending if it was completed/error
+                    const existing = updatedFiles[existingIndex];
+                    if (existing.status === 'completed' || existing.status === 'error') {
+                        updatedFiles[existingIndex] = { ...existing, status: 'pending' as const, progress: 0, error: undefined };
+                    }
+                }
+            });
+            return updatedFiles;
+        });
     }, []);
 
     const handleFolderSelect = useCallback(() => {
@@ -106,6 +123,23 @@ export default function UploadPage() {
     }, []);
 
     const uploadFile = async (uploadFile: UploadFile): Promise<void> => {
+        const fileName = uploadFile.file.name;
+
+        // Prevent duplicate uploads
+        if (uploadingFiles.has(fileName)) {
+            setUploadFiles(prev =>
+                prev.map(f =>
+                    f.id === uploadFile.id
+                        ? { ...f, status: "error", error: "File already being uploaded" }
+                        : f
+                )
+            );
+            return;
+        }
+
+        // Add to uploading set
+        setUploadingFiles(prev => new Set(prev).add(fileName));
+
         try {
             // mark as uploading
             setUploadFiles(prev =>
@@ -126,35 +160,145 @@ export default function UploadPage() {
                 body: formData,
             });
 
+            const responseData = await uploadRes.json();
+
             if (!uploadRes.ok) {
-                const errorData = await uploadRes.json();
-                throw new Error(errorData.error || 'Upload failed');
+                // Handle specific error codes with user-friendly messages
+                const errorCode = responseData.code;
+                let userMessage = responseData.error || 'Upload failed';
+                let toastType: 'error' | 'warning' | 'info' = 'error';
+                let shouldRetry = false;
+
+                switch (errorCode) {
+                    case 'NO_FILE':
+                        userMessage = 'No file was selected for upload.';
+                        break;
+                    case 'FILE_TOO_LARGE':
+                        userMessage = 'File is too large. Maximum size is 50MB.';
+                        break;
+                    case 'INVALID_FORM_DATA':
+                        userMessage = 'Invalid file data. Please try again.';
+                        shouldRetry = true;
+                        break;
+                    case 'FILE_READ_ERROR':
+                        userMessage = 'Failed to read file. Please check the file and try again.';
+                        shouldRetry = true;
+                        break;
+                    case 'MIME_DETECTION_FAILED':
+                        userMessage = 'Could not determine file type. Please try again.';
+                        shouldRetry = true;
+                        break;
+                    case 'STORAGE_UPLOAD_FAILED':
+                        userMessage = 'Failed to upload to storage. Please check your connection and try again.';
+                        shouldRetry = true;
+                        toastType = 'warning';
+                        break;
+                    case 'NOT_AUTHENTICATED':
+                        userMessage = 'Please log in to upload files.';
+                        toastType = 'info';
+                        // Could redirect to login here
+                        break;
+                    case 'AUTH_SERVICE_ERROR':
+                    case 'AUTH_UNAVAILABLE':
+                        userMessage = 'Authentication service is temporarily unavailable. Please try again later.';
+                        shouldRetry = true;
+                        toastType = 'warning';
+                        break;
+                    case 'METADATA_SAVE_FAILED':
+                        userMessage = 'File uploaded but could not save information. The file is still accessible.';
+                        toastType = 'warning';
+                        // Mark as completed since file was uploaded
+                        setUploadFiles(prev =>
+                            prev.map(f =>
+                                f.id === uploadFile.id
+                                    ? { ...f, progress: 100, status: "completed" }
+                                    : f
+                            )
+                        );
+                        addToast(toastType, 'Partial Success', userMessage);
+                        return;
+                    case 'NETWORK_ERROR':
+                        userMessage = 'Network connection issue. Please check your internet and try again.';
+                        shouldRetry = true;
+                        toastType = 'warning';
+                        break;
+                    case 'TIMEOUT_ERROR':
+                        userMessage = 'Upload timed out. Please try again.';
+                        shouldRetry = true;
+                        break;
+                    case 'QUOTA_EXCEEDED':
+                        userMessage = 'Storage quota exceeded. Please contact support or free up space.';
+                        break;
+                    default:
+                        userMessage = responseData.error || 'An unexpected error occurred during upload.';
+                        shouldRetry = true;
+                }
+
+                // Show toast notification for the error
+                addToast(toastType, 'Upload Failed', userMessage);
+
+                // Throw error to mark file as failed
+                throw new Error(userMessage);
             }
 
-            const uploadData = await uploadRes.json();
-            console.log(`Upload completed: ${uploadData.category} (${uploadData.confidence})`);
+            const uploadData = responseData;
 
-            // mark as completed
-            setUploadFiles(prev =>
-                prev.map(f =>
-                    f.id === uploadFile.id
-                        ? { ...f, progress: 100, status: "completed" }
-                        : f
-                )
-            );
+            if (uploadData.duplicate) {
+                // Handle duplicate file
+                setUploadFiles(prev =>
+                    prev.map(f =>
+                        f.id === uploadFile.id
+                            ? { ...f, progress: 100, status: "completed" }
+                            : f
+                    )
+                );
+                addToast('info', 'Duplicate File', `${file.name} already exists and was skipped.`);
+            } else {
+                // Normal completion
+                setUploadFiles(prev =>
+                    prev.map(f =>
+                        f.id === uploadFile.id
+                            ? { ...f, progress: 100, status: "completed" }
+                            : f
+                    )
+                );
+                // Show success toast for individual file uploads
+                addToast('success', 'File Uploaded', `${file.name} uploaded successfully!`);
+            }
+
+            // Remove from uploading set
+            setUploadingFiles(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(fileName);
+                return newSet;
+            });
+
         } catch (error: any) {
             console.error("Upload error:", error.message || error);
+
+            // Extract user-friendly message if it's already been processed above
+            const errorMessage = error.message?.includes('Upload Failed') ?
+                error.message :
+                (error.message || "Upload failed");
+
             setUploadFiles(prev =>
                 prev.map(f =>
                     f.id === uploadFile.id
                         ? {
                             ...f,
                             status: "error",
-                            error: error.message || "Upload failed",
+                            error: errorMessage,
                         }
                         : f
                 )
             );
+
+            // Remove from uploading set on error
+            setUploadingFiles(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(fileName);
+                return newSet;
+            });
         }
     };
 

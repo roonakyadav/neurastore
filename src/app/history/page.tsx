@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ const formatFileSize = (bytes: number) => {
 };
 
 export default function HistoryPage() {
+    const router = useRouter();
     const { addToast } = useToast();
     const [files, setFiles] = useState<FileMetadata[]>([]);
     const [loading, setLoading] = useState(true);

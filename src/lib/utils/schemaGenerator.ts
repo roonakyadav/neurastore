@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabaseClient';
 export interface JSONSchema {
     id?: string;
     file_id: string;
-    schema_json: any;
+    schema: any;
     storage_type: 'SQL' | 'NoSQL';
 }
 
@@ -21,6 +21,138 @@ export interface SchemaAnalysis {
         table: string;
         type: 'one-to-one' | 'one-to-many' | 'many-to-many';
     }>;
+}
+
+export interface BatchSchemaAnalysis {
+    isConsistent: boolean;
+    commonKeys: string[];
+    keyTypeMapping: Record<string, string>;
+    sampleSize: number;
+    inconsistencies: string[];
+    proposedSQLSchema: Record<string, string>;
+    storageRecommendation: 'SQL' | 'NoSQL';
+}
+
+/**
+ * Analyze batch of JSON objects to determine schema consistency
+ */
+export function analyzeBatchSchema(jsonObjects: any[]): BatchSchemaAnalysis {
+    if (!Array.isArray(jsonObjects) || jsonObjects.length === 0) {
+        return {
+            isConsistent: false,
+            commonKeys: [],
+            keyTypeMapping: {},
+            sampleSize: 0,
+            inconsistencies: ['No data provided'],
+            proposedSQLSchema: {},
+            storageRecommendation: 'NoSQL'
+        };
+    }
+
+    const sampleSize = jsonObjects.length;
+    const allKeys = new Set<string>();
+    const keyOccurrences: Record<string, number> = {};
+    const keyTypes: Record<string, Set<string>> = {};
+    const inconsistencies: string[] = [];
+
+    // Collect all keys and their types
+    jsonObjects.forEach((obj, index) => {
+        if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+            inconsistencies.push(`Item ${index} is not a valid object`);
+            return;
+        }
+
+        const objKeys = Object.keys(obj);
+        objKeys.forEach(key => {
+            allKeys.add(key);
+            keyOccurrences[key] = (keyOccurrences[key] || 0) + 1;
+
+            const value = obj[key];
+            const valueType = getValueType(value);
+
+            if (!keyTypes[key]) {
+                keyTypes[key] = new Set();
+            }
+            keyTypes[key].add(valueType);
+        });
+    });
+
+    // Determine common keys (present in at least 80% of objects)
+    const commonKeys = Array.from(allKeys).filter(key =>
+        keyOccurrences[key] >= sampleSize * 0.8
+    );
+
+    // Check for type consistency
+    const keyTypeMapping: Record<string, string> = {};
+    let isConsistent = true;
+
+    commonKeys.forEach(key => {
+        const types = Array.from(keyTypes[key]);
+        if (types.length > 1) {
+            inconsistencies.push(`Key '${key}' has multiple types: ${types.join(', ')}`);
+            isConsistent = false;
+            // Use the most common type
+            keyTypeMapping[key] = types[0];
+        } else {
+            keyTypeMapping[key] = types[0];
+        }
+    });
+
+    // Generate proposed SQL schema
+    const proposedSQLSchema: Record<string, string> = {};
+    commonKeys.forEach(key => {
+        proposedSQLSchema[key] = mapToSQLType({ type: keyTypeMapping[key] });
+    });
+
+    // Determine storage recommendation
+    const avgKeyCount = jsonObjects.reduce((sum, obj) =>
+        sum + (typeof obj === 'object' && !Array.isArray(obj) ? Object.keys(obj).length : 0), 0
+    ) / sampleSize;
+
+    const storageRecommendation = avgKeyCount <= 20 && isConsistent ? 'SQL' : 'NoSQL';
+
+    return {
+        isConsistent,
+        commonKeys,
+        keyTypeMapping,
+        sampleSize,
+        inconsistencies,
+        proposedSQLSchema,
+        storageRecommendation
+    };
+}
+
+/**
+ * Get the type of a value for schema analysis
+ */
+function getValueType(value: any): string {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return 'array';
+    return typeof value;
+}
+
+/**
+ * Save batch schema analysis to database
+ */
+export async function saveBatchSchemaAnalysis(
+    fileId: string,
+    batchAnalysis: BatchSchemaAnalysis
+): Promise<string | null> {
+    try {
+        const schemaData: JSONSchema = {
+            file_id: fileId,
+            schema: {
+                batchAnalysis,
+                timestamp: new Date().toISOString()
+            },
+            storage_type: batchAnalysis.storageRecommendation
+        };
+
+        return await saveJSONSchema(schemaData);
+    } catch (error) {
+        console.error('Save batch schema analysis failed:', error);
+        return null;
+    }
 }
 
 /**
