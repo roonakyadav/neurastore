@@ -145,7 +145,7 @@ export async function POST(req: Request) {
 
         // Check if file is an image - use Hugging Face for images
         if (mimeType.startsWith("image/")) {
-            const key = process.env.NEXT_PUBLIC_HF_API_KEY;
+            const key = process.env.HUGGINGFACE_API_KEY;
             if (!key)
                 return NextResponse.json(
                     { error: "Missing Hugging Face key" },
@@ -190,9 +190,9 @@ export async function POST(req: Request) {
 
             const { label, score } = result[0];
             return NextResponse.json({
-                category: label || "Uncategorized",
+                category: "Image",
                 confidence: score || 0,
-                tags: [],
+                tags: [label || "image"],
                 message: "AI classification completed"
             });
         }
@@ -228,7 +228,7 @@ export async function POST(req: Request) {
 
                     if (extractedText && extractedText.length > 10) {
                         // Use Hugging Face sentiment analysis for document classification
-                        const key = process.env.NEXT_PUBLIC_HF_API_KEY;
+                        const key = process.env.HUGGINGFACE_API_KEY;
                         if (key) {
                             const sentimentController = new AbortController();
                             const sentimentTimeout = setTimeout(() => sentimentController.abort(), 15000);
@@ -343,7 +343,7 @@ export async function POST(req: Request) {
 
                     if (schemaAnalysis) {
                         return NextResponse.json({
-                            category: `${category} (${schemaAnalysis.storageType})`,
+                            category: `JSON (${schemaAnalysis.storageType})`,
                             confidence: 0.95,
                             tags: ["json", isArray ? "array" : "object", schemaAnalysis.storageType.toLowerCase()],
                             schema: schemaAnalysis,

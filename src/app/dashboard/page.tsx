@@ -455,7 +455,7 @@ export default function Dashboard() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Categories</SelectItem>
-                                {Array.from(new Set(allFiles.map(f => f.category))).map(category => (
+                                {Array.from(new Set(allFiles.map(f => f.category || 'Uncategorized'))).map(category => (
                                     <SelectItem key={category} value={category}>{category}</SelectItem>
                                 ))}
                             </SelectContent>
@@ -548,8 +548,8 @@ export default function Dashboard() {
                                                 <TableCell>{formatFileSize(file.size)}</TableCell>
                                                 <TableCell>{new Date(file.uploaded_at).toLocaleDateString()}</TableCell>
                                                 <TableCell>
-                                                    <Badge className={`${getCategoryColor(file.category)} text-white`}>
-                                                        {file.category}
+                                                    <Badge className={`${getCategoryColor(file.category || 'Uncategorized')} text-white`}>
+                                                        {file.category || 'Uncategorized'}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>

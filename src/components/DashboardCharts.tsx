@@ -60,7 +60,8 @@ export default function DashboardCharts({ files }: DashboardChartsProps) {
     // Top AI tags data
     const tagCounts: { [key: string]: number } = {};
     files.forEach(file => {
-        tagCounts[file.category] = (tagCounts[file.category] || 0) + 1;
+        const category = file.category || 'Uncategorized';
+        tagCounts[category] = (tagCounts[category] || 0) + 1;
     });
 
     const topTags = Object.entries(tagCounts)
