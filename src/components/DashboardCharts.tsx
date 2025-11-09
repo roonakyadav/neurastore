@@ -30,6 +30,7 @@ const getFileTypeCategory = (type: string) => {
 };
 
 export default function DashboardCharts({ files }: DashboardChartsProps) {
+    if (!files || !Array.isArray(files)) return <p>No data to visualize.</p>;
     // Add validation
     if (!files || files.length === 0) {
         return (
