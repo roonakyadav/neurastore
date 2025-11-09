@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import DashboardCharts from "@/components/DashboardCharts";
+import JSONVisualizer from "@/components/JSONVisualizer";
 import { formatDistanceToNow } from "date-fns";
 
 export default function DashboardPage() {
@@ -11,6 +12,8 @@ export default function DashboardPage() {
     const [error, setError] = useState<string | null>(null);
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [sortBy, setSortBy] = useState("recent");
+    const [showJSON, setShowJSON] = useState(false);
+    const [jsonData, setJsonData] = useState(null);
 
     useEffect(() => {
         let isMounted = true;
@@ -57,6 +60,17 @@ export default function DashboardPage() {
         applyFilters(selectedCategory, sortBy);
     }, [selectedCategory, sortBy, files]);
 
+    async function handleAnalyzeJSON(file: any) {
+        try {
+            const res = await fetch(file.public_url);
+            const data = await res.json();
+            setJsonData(data);
+            setShowJSON(true);
+        } catch (err) {
+            console.error("Error analyzing JSON:", err);
+        }
+    }
+
     if (loading) return <p className="text-gray-400 text-center mt-10">Loading dashboard data...</p>;
     if (error) return <p className="text-red-400 text-center mt-10">Error: {error}</p>;
     if (!files.length) return <p className="text-gray-400 text-center mt-10">No files found in Supabase.</p>;
@@ -90,28 +104,9 @@ export default function DashboardPage() {
             </div>
 
             {/* Charts */}
-            <DashboardCharts files={filteredFiles} />
+            <DashboardCharts files={filteredFiles} onAnalyzeJSON={handleAnalyzeJSON} />
 
-            {/* Files List */}
-            <div className="bg-gray-900 p-4 rounded-lg">
-                <h2 className="text-lg font-medium mb-3">Uploaded Files ({filteredFiles.length})</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {filteredFiles.map((file) => (
-                        <div key={file.id} className="p-3 bg-gray-800 rounded-lg border border-gray-700 hover:border-gray-500 transition">
-                            <p className="text-sm font-medium truncate">{file.name}</p>
-                            <p className="text-xs text-gray-400">{file.category || "Uncategorized"} • {(file.size / 1024).toFixed(2)} KB</p>
-                            <p className="text-xs text-gray-500">Uploaded {formatDistanceToNow(new Date(file.uploaded_at))} ago</p>
-                            {file.ai_tags && file.ai_tags.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-1">
-                                    {file.ai_tags.map((tag: string, i: number) => (
-                                        <span key={i} className="text-xs bg-gray-700 px-2 py-0.5 rounded">{tag}</span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </div>
+            {showJSON && <JSONVisualizer data={jsonData} onClose={() => setShowJSON(false)} />}
         </div>
     );
 }
