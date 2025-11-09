@@ -69,6 +69,16 @@ const getCategoryColor = (category: string) => {
         'building': 'bg-indigo-500',
         'technology': 'bg-pink-500',
         'sports': 'bg-orange-500',
+        'image': 'bg-blue-500',
+        'video': 'bg-red-500',
+        'audio': 'bg-green-500',
+        'document': 'bg-yellow-500',
+        'archive': 'bg-purple-500',
+        'text': 'bg-indigo-500',
+        'code': 'bg-pink-500',
+        'json': 'bg-orange-500',
+        'sql': 'bg-teal-500',
+        'general': 'bg-gray-500',
     };
     return colors[category.toLowerCase()] || 'bg-gray-500';
 };
@@ -467,7 +477,7 @@ export default function Dashboard() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">All Categories</SelectItem>
-                                        {Array.from(new Set(allFiles.map(f => f.category || 'Uncategorized'))).map(category => (
+                                        {Array.from(new Set(allFiles.map(f => f.category || 'General'))).map(category => (
                                             <SelectItem key={category} value={category}>{category}</SelectItem>
                                         ))}
                                     </SelectContent>
@@ -560,8 +570,8 @@ export default function Dashboard() {
                                                         <TableCell>{formatFileSize(file.size)}</TableCell>
                                                         <TableCell>{new Date(file.uploaded_at).toLocaleDateString()}</TableCell>
                                                         <TableCell>
-                                                            <Badge className={`${getCategoryColor(file.category || 'Uncategorized')} text-white`}>
-                                                                {file.category || 'Uncategorized'}
+                                                            <Badge className={`${getCategoryColor(file.category || 'General')} text-white`}>
+                                                                {file.category || 'General'}
                                                             </Badge>
                                                         </TableCell>
                                                         <TableCell>

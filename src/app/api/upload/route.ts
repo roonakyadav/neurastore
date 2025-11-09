@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { detectMimeType, getFolderPath, generateFilePath, uploadToSupabase, saveFileMetadata } from "@/lib/utils/fileHandler";
 import { processJSONFile, saveJSONSchema } from "@/lib/utils/schemaGenerator";
 import { supabase } from "@/lib/supabaseClient";
+import { detectFileCategory, classifyJSON } from "@/lib/fileClassifier";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -115,77 +116,29 @@ export async function POST(req: Request) {
         const { publicUrl } = uploadResult;
 
         // Step 6: Classify the file
-        let category = "Unclassified";
-        let confidence = 0;
+        let category = detectFileCategory(file.name, mimeType);
+        let confidence = 1;
 
-        if (mimeType === "application/json") {
-            // Special handling for JSON files - use classification API
+        if (file.name.toLowerCase().endsWith('.json')) {
             try {
-                const origin = req.headers.get('origin') || 'http://localhost:3000';
-                const classifyResponse = await fetch(`${origin}/api/classify`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        fileUrl: publicUrl,
-                        mimeType: mimeType
-                    }),
-                });
-
-                if (classifyResponse.ok) {
-                    const classifyData = await classifyResponse.json();
-                    category = classifyData.category;
-                    confidence = classifyData.confidence;
-                } else {
-                    category = "Corrupted JSON";
-                    confidence = 1.0;
-                }
+                const content = buffer.toString('utf-8');
+                category = classifyJSON(content);
+                confidence = 1;
             } catch (error) {
                 console.error("JSON classification failed:", error);
                 category = "Corrupted JSON";
-                confidence = 1.0;
-            }
-        } else {
-            // Use classification API for other file types
-            try {
-                const origin = req.headers.get('origin') || 'http://localhost:3000';
-                const classifyResponse = await fetch(`${origin}/api/classify`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        fileUrl: publicUrl,
-                        mimeType: mimeType
-                    }),
-                });
-
-                if (classifyResponse.ok) {
-                    const classifyData = await classifyResponse.json();
-                    category = classifyData.category || "Unclassified";
-                    confidence = classifyData.confidence || 0;
-                } else {
-                    const errorText = await classifyResponse.text();
-                    // Don't fail the upload for classification issues
-                    category = "Unclassified";
-                    confidence = 0;
-                }
-            } catch (error) {
-                console.error("Classification request failed:", error);
-                // Don't fail the upload for classification issues
-                category = "Unclassified";
-                confidence = 0;
+                confidence = 1;
             }
         }
 
         // Step 7: Normalize data before database insertion
         const cleanData = {
-            name: file.name || 'unknown_file',
+            name: file.name || 'Untitled',
             size: file.size || 0,
             mime_type: mimeType || 'application/octet-stream',
-            category: category || 'Unclassified',
-            confidence: confidence ?? 0,
+            category: category,
+            confidence: confidence,
+            ai_tags: [],
             uploaded_at: new Date().toISOString(),
             public_url: publicUrl,
             folder_path: folderPath,
